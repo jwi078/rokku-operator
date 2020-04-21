@@ -1,0 +1,5 @@
+# Single replica Rokku deploy
+apiVersion: rokku.ing.com/v1alpha1
+kind: RokkuProxy
+metadata:
+  name: rokku

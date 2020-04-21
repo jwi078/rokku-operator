@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rokku-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: rokku-operator
+  template:
+    metadata:
+      labels:
+        name: rokku-operator
+    spec:
+      serviceAccountName: rokku-operator
+      containers:
+        - name: rokku-operator
+          # Replace this with the built image name
+          image: jwi078/rokku-operator:v0.0.6
+          command:
+          - rokku-operator
+          imagePullPolicy: Always
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "rokku-operator"
