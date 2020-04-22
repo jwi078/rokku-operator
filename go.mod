@@ -3,6 +3,7 @@ module github.com/jwi078/rokku-operator
 go 1.13
 
 require (
+	github.com/go-delve/delve v1.4.0 // indirect
 	github.com/howeyc/fsnotify v0.9.0 // indirect
 	github.com/operator-framework/operator-sdk v0.17.0
 	github.com/spf13/pflag v1.0.5

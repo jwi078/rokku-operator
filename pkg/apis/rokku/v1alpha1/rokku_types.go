@@ -11,21 +11,27 @@ import (
 
 // RokkuProxySpec defines the desired state of RokkuProxy
 //TODO init container for vault stuff
-type RokkuProxySpec struct {
+type RokkuSpec struct {
 	Size            int32                       `json:"size"`
 	Image           string                      `json:"image,omitempty"`
 	Replicas        *int32                      `json:"replicas,omitempty"`
 	PodTemplate     RokkuPodTemplateSpec        `json:"podTemplate,omitempty"`
 	SecurityContext *corev1.SecurityContext     `json:"securityContext,omitempty"`
 	Service         *RokkuService               `json:"service,omitempty"`
-	Config          RokkuConfigSpec             `json:"cache,omitempty"`
+	Config          *ConfigRef                  `json:"config,omitempty"`
 	Lifecycle       *RokkuLifecycle             `json:"lifecycle,omitempty"`
 	HealthcheckPath string                      `json:"healthcheckPath,omitempty"`
 	Resources       corev1.ResourceRequirements `json:"resources,omitempty"`
+	Environment     *RokkuEnvironment           `json:"env,omitempty"`
+}
+
+type RokkuEnvironment struct {
+	EnvName  string `json:"name,omitempty"`
+	EnvValue string `json:"value,omitempty"`
 }
 
 // RokkuProxyStatus defines the observed state of RokkuProxy
-type RokkuProxyStatus struct {
+type RokkuStatus struct {
 	Pods            []PodStatus     `json:"pods,omitempty"`
 	Services        []ServiceStatus `json:"services,omitempty"`
 	CurrentReplicas int32           `json:"currentReplicas,omitempty"`
@@ -70,20 +76,20 @@ type RokkuService struct {
 // RokkuProxy is the Schema for the rokkuproxies API
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=rokkuproxies,scope=Namespaced
-type RokkuProxy struct {
+type Rokku struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   RokkuProxySpec   `json:"spec,omitempty"`
-	Status RokkuProxyStatus `json:"status,omitempty"`
+	Spec   RokkuSpec   `json:"spec,omitempty"`
+	Status RokkuStatus `json:"status,omitempty"`
 }
 
 type RokkuConfigSpec struct {
 	// InMemory if set to true creates a memory backed volume.
 	InMemory bool `json:"inMemory,omitempty"`
-	// Path is the mount path for the cache volume.
+	// Path is the mount path for the config volume.
 	Path string `json:"path"`
-	// Size is the maximum size allowed for the cache volume.
+	// Size is the maximum size allowed for the config volume.
 	// +optional
 	Size *resource.Quantity `json:"size,omitempty"`
 }
@@ -91,10 +97,10 @@ type RokkuConfigSpec struct {
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // RokkuProxyList contains a list of RokkuProxy
-type RokkuProxyList struct {
+type RokkuList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []RokkuProxy `json:"items"`
+	Items           []Rokku `json:"items"`
 }
 
 type RokkuPodTemplateSpec struct {
@@ -143,6 +149,16 @@ type ConfigRef struct {
 	Value string `json:"value,omitempty"`
 }
 
+type ConfigKind string
+
+const (
+	// ConfigKindConfigMap is a Kind of configuration that points to a configmap
+	ConfigKindConfigMap = ConfigKind("ConfigMap")
+	// ConfigKindInline is a kinda of configuration that is setup as a annotation on the Pod
+	// and is inject as a file on the container using the Downward API.
+	ConfigKindInline = ConfigKind("Inline")
+)
+
 type PodStatus struct {
 	// Name is the name of the POD running rokku
 	Name string `json:"name"`
@@ -169,8 +185,6 @@ type FilesRef struct {
 	Files map[string]string `json:"files,omitempty"`
 }
 
-type ConfigKind string
-
 func init() {
-	SchemeBuilder.Register(&RokkuProxy{}, &RokkuProxyList{})
+	SchemeBuilder.Register(&Rokku{}, &RokkuList{})
 }

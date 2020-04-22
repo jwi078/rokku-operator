@@ -70,6 +70,7 @@ rules:
   - rokku.ing.com
   resources:
   - '*'
+  - rokkus
   verbs:
   - create
   - delete

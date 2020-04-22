@@ -1,4 +1,4 @@
-package rokkuproxy
+package rokku
 
 import (
 	"context"
@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-var log = logf.Log.WithName("controller_rokkuproxy")
+var log = logf.Log.WithName("controller_rokku")
 
 // Add creates a new Rokku Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -33,19 +33,19 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileRokkuProxy{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileRokku{client: mgr.GetClient(), scheme: mgr.GetScheme()}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("rokkuproxy-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("rokku-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
 	// Watch for changes to primary resource Rokku
-	err = c.Watch(&source.Kind{Type: &rokkuv1alpha1.RokkuProxy{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &rokkuv1alpha1.Rokku{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -72,10 +72,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	)
 }
 
-var _ reconcile.Reconciler = &ReconcileRokkuProxy{}
+var _ reconcile.Reconciler = &ReconcileRokku{}
 
 // ReconcileRokku reconciles a Rokku object
-type ReconcileRokkuProxy struct {
+type ReconcileRokku struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client client.Client
@@ -87,14 +87,14 @@ type ReconcileRokkuProxy struct {
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileRokkuProxy) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("RokkuProxy", request)
+func (r *ReconcileRokku) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+	reqLogger := log.WithValues("Rokku", request)
 	reqLogger.Info("Starting Rokku reconciling")
 	defer reqLogger.Info("Finishing Rokku reconciling")
 
 	ctx := context.Background()
 
-	instance := &rokkuv1alpha1.RokkuProxy{}
+	instance := &rokkuv1alpha1.Rokku{}
 	err := r.client.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -119,20 +119,20 @@ func (r *ReconcileRokkuProxy) Reconcile(request reconcile.Request) (reconcile.Re
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileRokkuProxy) reconcileRokku(ctx context.Context, rokkuproxy *rokkuv1alpha1.RokkuProxy) error {
-	if err := r.reconcileDeployment(ctx, rokkuproxy); err != nil {
+func (r *ReconcileRokku) reconcileRokku(ctx context.Context, rokku *rokkuv1alpha1.Rokku) error {
+	if err := r.reconcileDeployment(ctx, rokku); err != nil {
 		return err
 	}
 
-	if err := r.reconcileService(ctx, rokkuproxy); err != nil {
+	if err := r.reconcileService(ctx, rokku); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (r *ReconcileRokkuProxy) reconcileDeployment(ctx context.Context, rokkuproxy *rokkuv1alpha1.RokkuProxy) error {
-	newDeploy, err := k8s.NewDeployment(rokkuproxy)
+func (r *ReconcileRokku) reconcileDeployment(ctx context.Context, rokku *rokkuv1alpha1.Rokku) error {
+	newDeploy, err := k8s.NewDeployment(rokku)
 	if err != nil {
 		return fmt.Errorf("failed to assemble deployment from Rokku: %v", err)
 	}
@@ -153,17 +153,17 @@ func (r *ReconcileRokkuProxy) reconcileDeployment(ctx context.Context, rokkuprox
 		return fmt.Errorf("failed to retrieve deployment: %v", err)
 	}
 
-	currSpec, err := k8s.ExtractRokkuProxySpec(currDeploy.ObjectMeta)
+	currSpec, err := k8s.ExtractRokkuSpec(currDeploy.ObjectMeta)
 	if err != nil {
 		return fmt.Errorf("failed to extract rokku from deployment: %v", err)
 	}
 
-	if reflect.DeepEqual(rokkuproxy.Spec, currSpec) {
+	if reflect.DeepEqual(rokku.Spec, currSpec) {
 		return nil
 	}
 
 	currDeploy.Spec = newDeploy.Spec
-	if err := k8s.SetRokkuSpec(&currDeploy.ObjectMeta, rokkuproxy.Spec); err != nil {
+	if err := k8s.SetRokkuSpec(&currDeploy.ObjectMeta, rokku.Spec); err != nil {
 		return fmt.Errorf("failed to set rokku spec into object meta: %v", err)
 	}
 
@@ -174,16 +174,16 @@ func (r *ReconcileRokkuProxy) reconcileDeployment(ctx context.Context, rokkuprox
 	return nil
 }
 
-func (r *ReconcileRokkuProxy) reconcileService(ctx context.Context, rokkuproxy *rokkuv1alpha1.RokkuProxy) error {
+func (r *ReconcileRokku) reconcileService(ctx context.Context, rokku *rokkuv1alpha1.Rokku) error {
 	svcName := types.NamespacedName{
-		Name:      fmt.Sprintf("%s-service", rokkuproxy.Name),
-		Namespace: rokkuproxy.Namespace,
+		Name:      fmt.Sprintf("%s-service", rokku.Name),
+		Namespace: rokku.Namespace,
 	}
 
 	logger := log.WithName("reconcileService").WithValues("Service", svcName)
 	logger.V(4).Info("Getting Service resource")
 
-	newService := k8s.NewService(rokkuproxy)
+	newService := k8s.NewService(rokku)
 
 	var currentService corev1.Service
 	err := r.client.Get(ctx, svcName, &currentService)
@@ -216,31 +216,31 @@ func (r *ReconcileRokkuProxy) reconcileService(ctx context.Context, rokkuproxy *
 	return r.client.Update(ctx, newService)
 }
 
-func (r *ReconcileRokkuProxy) refreshStatus(ctx context.Context, rokkuproxy *rokkuv1alpha1.RokkuProxy) error {
-	pods, err := listPods(ctx, r.client, rokkuproxy)
+func (r *ReconcileRokku) refreshStatus(ctx context.Context, rokku *rokkuv1alpha1.Rokku) error {
+	pods, err := listPods(ctx, r.client, rokku)
 	if err != nil {
 		return fmt.Errorf("failed to list pods for Rokku: %v", err)
 	}
-	services, err := listServices(ctx, r.client, rokkuproxy)
+	services, err := listServices(ctx, r.client, rokku)
 	if err != nil {
 		return fmt.Errorf("failed to list services for rokku: %v", err)
 
 	}
 
-	sort.Slice(rokkuproxy.Status.Pods, func(i, j int) bool {
-		return rokkuproxy.Status.Pods[i].Name < rokkuproxy.Status.Pods[j].Name
+	sort.Slice(rokku.Status.Pods, func(i, j int) bool {
+		return rokku.Status.Pods[i].Name < rokku.Status.Pods[j].Name
 	})
 
-	sort.Slice(rokkuproxy.Status.Services, func(i, j int) bool {
-		return rokkuproxy.Status.Services[i].Name < rokkuproxy.Status.Services[j].Name
+	sort.Slice(rokku.Status.Services, func(i, j int) bool {
+		return rokku.Status.Services[i].Name < rokku.Status.Services[j].Name
 	})
 
-	if !reflect.DeepEqual(pods, rokkuproxy.Status.Pods) || !reflect.DeepEqual(services, rokkuproxy.Status.Services) {
-		rokkuproxy.Status.Pods = pods
-		rokkuproxy.Status.Services = services
-		rokkuproxy.Status.CurrentReplicas = int32(len(pods))
-		rokkuproxy.Status.PodSelector = k8s.LabelsForRokkuString(rokkuproxy.Name)
-		err := r.client.Status().Update(ctx, rokkuproxy)
+	if !reflect.DeepEqual(pods, rokku.Status.Pods) || !reflect.DeepEqual(services, rokku.Status.Services) {
+		rokku.Status.Pods = pods
+		rokku.Status.Services = services
+		rokku.Status.CurrentReplicas = int32(len(pods))
+		rokku.Status.PodSelector = k8s.LabelsForRokkuString(rokku.Name)
+		err := r.client.Status().Update(ctx, rokku)
 		if err != nil {
 			return fmt.Errorf("failed to update rokku status: %v", err)
 		}
@@ -250,10 +250,10 @@ func (r *ReconcileRokkuProxy) refreshStatus(ctx context.Context, rokkuproxy *rok
 }
 
 // listPods return all the pods for the given rokku sorted by name
-func listPods(ctx context.Context, c client.Client, rokkuproxy *rokkuv1alpha1.RokkuProxy) ([]rokkuv1alpha1.PodStatus, error) {
+func listPods(ctx context.Context, c client.Client, rokku *rokkuv1alpha1.Rokku) ([]rokkuv1alpha1.PodStatus, error) {
 	podList := &corev1.PodList{}
-	labelSelector := labels.SelectorFromSet(k8s.LabelsForRokku(rokkuproxy.Name))
-	listOps := &client.ListOptions{Namespace: rokkuproxy.Namespace, LabelSelector: labelSelector}
+	labelSelector := labels.SelectorFromSet(k8s.LabelsForRokku(rokku.Name))
+	listOps := &client.ListOptions{Namespace: rokku.Namespace, LabelSelector: labelSelector}
 	err := c.List(ctx, podList, listOps)
 	if err != nil {
 		return nil, err
@@ -284,10 +284,10 @@ func listPods(ctx context.Context, c client.Client, rokkuproxy *rokkuv1alpha1.Ro
 }
 
 // listServices return all the services for the given rokku sorted by name
-func listServices(ctx context.Context, c client.Client, rokkuproxy *rokkuv1alpha1.RokkuProxy) ([]rokkuv1alpha1.ServiceStatus, error) {
+func listServices(ctx context.Context, c client.Client, rokku *rokkuv1alpha1.Rokku) ([]rokkuv1alpha1.ServiceStatus, error) {
 	serviceList := &corev1.ServiceList{}
-	labelSelector := labels.SelectorFromSet(k8s.LabelsForRokku(rokkuproxy.Name))
-	listOps := &client.ListOptions{Namespace: rokkuproxy.Namespace, LabelSelector: labelSelector}
+	labelSelector := labels.SelectorFromSet(k8s.LabelsForRokku(rokku.Name))
+	listOps := &client.ListOptions{Namespace: rokku.Namespace, LabelSelector: labelSelector}
 	err := c.List(ctx, serviceList, listOps)
 	if err != nil {
 		return nil, err

@@ -3,8 +3,10 @@ package k8s
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/jwi078/rokku-operator/pkg/apis/rokku/v1alpha1"
 	"math"
+
+	"github.com/jwi078/rokku-operator/pkg/apis/rokku/v1alpha1"
+
 	//"sort"
 	"strings"
 
@@ -33,6 +35,7 @@ const (
 	curlProbeCommand        = "curl -m%d -kfsS -o /dev/null %s"
 	configMountPath         = "/etc/rokku"
 	generatedFromAnnotation = "rokku.ing.com/generated-from"
+	configFileName          = "ranger-s3-security.xml"
 )
 
 var rokkuEntrypoint = []string{
@@ -49,7 +52,7 @@ var defaultPostStartCommand = []string{
 	"echo Hello from the postStart handler",
 }
 
-func NewDeployment(n *v1alpha1.RokkuProxy) (*appv1.Deployment, error) {
+func NewDeployment(n *v1alpha1.Rokku) (*appv1.Deployment, error) {
 	n.Spec.Image = valueOrDefault(n.Spec.Image, defaultRokkuImage)
 	setDefaultPorts(&n.Spec.PodTemplate)
 
@@ -93,7 +96,7 @@ func NewDeployment(n *v1alpha1.RokkuProxy) (*appv1.Deployment, error) {
 				*metav1.NewControllerRef(n, schema.GroupVersionKind{
 					Group:   v1alpha1.SchemeGroupVersion.Group,
 					Version: v1alpha1.SchemeGroupVersion.Version,
-					Kind:    "RokkuProxy",
+					Kind:    "Rokku",
 				}),
 			},
 		},
@@ -136,7 +139,8 @@ func NewDeployment(n *v1alpha1.RokkuProxy) (*appv1.Deployment, error) {
 		},
 	}
 	setupProbes(n.Spec, &deployment)
-	setupConfigVolume(n.Spec.Config, &deployment)
+	setupConfig(n.Spec.Config, &deployment)
+	//setupConfigVolume(n.Spec.Config, &deployment)
 	setupLifecycle(n.Spec.Lifecycle, &deployment)
 
 	// This is done on the last step because n.Spec may have mutated during these methods
@@ -176,7 +180,7 @@ func mergeMap(a, b map[string]string) map[string]string {
 	return a
 }
 
-func SetRokkuSpec(o *metav1.ObjectMeta, spec v1alpha1.RokkuProxySpec) error {
+func SetRokkuSpec(o *metav1.ObjectMeta, spec v1alpha1.RokkuSpec) error {
 	if o.Annotations == nil {
 		o.Annotations = make(map[string]string)
 	}
@@ -231,7 +235,7 @@ func setupLifecycle(lifecycle *v1alpha1.RokkuLifecycle, dep *appv1.Deployment) {
 	}
 }
 
-func assembleLabels(n v1alpha1.RokkuProxy) map[string]string {
+func assembleLabels(n v1alpha1.Rokku) map[string]string {
 	labels := LabelsForRokku(n.Name)
 	if value, err := tsuruConfig.Get("rokku-controller:pod-template:labels"); err == nil {
 		if controllerLabels, ok := value.(map[interface{}]interface{}); ok {
@@ -241,7 +245,7 @@ func assembleLabels(n v1alpha1.RokkuProxy) map[string]string {
 	return mergeMap(labels, n.Spec.PodTemplate.Labels)
 }
 
-func assembleAnnotations(n v1alpha1.RokkuProxy) map[string]string {
+func assembleAnnotations(n v1alpha1.Rokku) map[string]string {
 	var annotations map[string]string
 	if value, err := tsuruConfig.Get("rokku-controller:pod-template:annotations"); err == nil {
 		if controllerAnnotations, ok := value.(map[interface{}]interface{}); ok {
@@ -305,6 +309,51 @@ func hasLowPort(ports []corev1.ContainerPort) bool {
 	return false
 }
 
+func setupConfig(conf *v1alpha1.ConfigRef, dep *appv1.Deployment) {
+	if conf == nil {
+		return
+	}
+	dep.Spec.Template.Spec.Containers[0].VolumeMounts = append(dep.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+		Name:      "rokku-config",
+		MountPath: fmt.Sprintf("%s/%s", configMountPath, configFileName),
+		SubPath:   configFileName,
+	})
+	switch conf.Kind {
+	case v1alpha1.ConfigKindConfigMap:
+		dep.Spec.Template.Spec.Volumes = append(dep.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: "rokku-config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: conf.Name,
+					},
+				},
+			},
+		})
+	case v1alpha1.ConfigKindInline:
+		// FIXME: inline content is being written out of order
+		if dep.Spec.Template.Annotations == nil {
+			dep.Spec.Template.Annotations = make(map[string]string)
+		}
+		dep.Spec.Template.Annotations[conf.Name] = conf.Value
+		dep.Spec.Template.Spec.Volumes = append(dep.Spec.Template.Spec.Volumes, corev1.Volume{
+			Name: "rokku-config",
+			VolumeSource: corev1.VolumeSource{
+				DownwardAPI: &corev1.DownwardAPIVolumeSource{
+					Items: []corev1.DownwardAPIVolumeFile{
+						{
+							Path: "ranger-s3-securirty.xml",
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: fmt.Sprintf("metadata.annotations['%s']", conf.Name),
+							},
+						},
+					},
+				},
+			},
+		})
+	}
+}
+
 func setupConfigVolume(config v1alpha1.RokkuConfigSpec, dep *appv1.Deployment) {
 	if config.Path == "" {
 		return
@@ -329,19 +378,19 @@ func setupConfigVolume(config v1alpha1.RokkuConfigSpec, dep *appv1.Deployment) {
 	})
 }
 
-func ExtractRokkuProxySpec(o metav1.ObjectMeta) (v1alpha1.RokkuProxySpec, error) {
+func ExtractRokkuSpec(o metav1.ObjectMeta) (v1alpha1.RokkuSpec, error) {
 	ann, ok := o.Annotations[generatedFromAnnotation]
 	if !ok {
-		return v1alpha1.RokkuProxySpec{}, fmt.Errorf("missing %q annotation in deployment", generatedFromAnnotation)
+		return v1alpha1.RokkuSpec{}, fmt.Errorf("missing %q annotation in deployment", generatedFromAnnotation)
 	}
-	var spec v1alpha1.RokkuProxySpec
+	var spec v1alpha1.RokkuSpec
 	if err := json.Unmarshal([]byte(ann), &spec); err != nil {
-		return v1alpha1.RokkuProxySpec{}, fmt.Errorf("failed to unmarshal rokku from annotation: %v", err)
+		return v1alpha1.RokkuSpec{}, fmt.Errorf("failed to unmarshal rokku from annotation: %v", err)
 	}
 	return spec, nil
 }
 
-func setupProbes(rokkuSpec v1alpha1.RokkuProxySpec, dep *appv1.Deployment) {
+func setupProbes(rokkuSpec v1alpha1.RokkuSpec, dep *appv1.Deployment) {
 	httpPort := portByName(rokkuSpec.PodTemplate.Ports, defaultHTTPPortName)
 	cmdTimeoutSec := int32(1)
 
@@ -373,14 +422,14 @@ func LabelsForRokkuString(name string) string {
 	return k8slabels.FormatLabels(LabelsForRokku(name))
 }
 
-func rokkuService(n *v1alpha1.RokkuProxy) corev1.ServiceType {
+func rokkuService(n *v1alpha1.Rokku) corev1.ServiceType {
 	if n == nil || n.Spec.Service == nil {
 		return corev1.ServiceTypeClusterIP
 	}
 	return corev1.ServiceType(n.Spec.Service.Type)
 }
 
-func NewService(n *v1alpha1.RokkuProxy) *corev1.Service {
+func NewService(n *v1alpha1.Rokku) *corev1.Service {
 	var labels, annotations map[string]string
 	var lbIP string
 	var externalTrafficPolicy corev1.ServiceExternalTrafficPolicyType
