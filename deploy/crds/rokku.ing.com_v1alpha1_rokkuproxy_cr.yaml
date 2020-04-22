@@ -1,8 +1,0 @@
-apiVersion: rokku.ing.com/v1alpha1
-kind: RokkuProxy
-metadata:
-  name: example-rokkuproxy
-spec:
-  # Add fields here
-  size: 1
-  image: wbaa/rokku

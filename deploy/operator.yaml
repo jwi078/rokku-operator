@@ -16,7 +16,7 @@ spec:
       containers:
         - name: rokku-operator
           # Replace this with the built image name
-          image: jwi078/rokku-operator:v0.0.6
+          image: jwi078/rokku-operator:v0.0.1
           command:
           - rokku-operator
           imagePullPolicy: Always

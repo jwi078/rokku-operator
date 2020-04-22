@@ -1,0 +1,10 @@
+apiVersion: rokku.ing.com/v1alpha1
+kind: RokkuProxy
+metadata:
+  name: rokku-proxy
+spec:
+  replicas: 1
+  size: 1
+  config:
+    kind: ConfigMap
+    name: rangersecurity
