@@ -1,7 +1,10 @@
 apiVersion: rokku.ing.com/v1alpha1
 kind: Rokku
 metadata:
-  name: example-rokku
+  name: rokku-proxy
 spec:
   # Add fields here
-  size: 3
+  size: 1
+  config:
+    kind: ConfigMap
+    name: rangersecurity
