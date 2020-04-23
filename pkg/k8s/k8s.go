@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 
 	"github.com/jwi078/rokku-operator/pkg/apis/rokku/v1alpha1"
 
@@ -128,6 +129,25 @@ func NewDeployment(n *v1alpha1.Rokku) (*appv1.Deployment, error) {
 							SecurityContext: securityContext,
 							Ports:           n.Spec.PodTemplate.Ports,
 							VolumeMounts:    n.Spec.PodTemplate.VolumeMounts,
+							Env: []corev1.EnvVar{
+								{Name: "ROKKU_STORAGE_S3_HOST",
+									Value: valueOrDefault("ceph-server", os.Getenv("ROKKU_STORAGE_S3_HOST")),
+								},
+								{Name: "ROKKU_STORAGE_S3_PORT",
+									Value: valueOrDefault("1234", os.Getenv("ROKKU_STORAGE_S3_PORT"))},
+								{Name: "ROKKU_HTTP_BIND",
+									Value: valueOrDefault("8080", os.Getenv("ROKKU_HTTP_BIND"))},
+								{Name: "ROKKU_STS_URI",
+									Value: valueOrDefault("http://rokku-sts:8080", os.Getenv("ROKKU_STS_URI"))},
+								{Name: "ALLOW_LIST_BUCKETS",
+									Value: valueOrDefault("True", "False")},
+								{Name: "ALLOW_CREATE_BUCKETS",
+									Value: valueOrDefault("True", "False")},
+								{Name: "ROKKU_ATLAS_ENABLED",
+									Value: valueOrDefault("True", "False")},
+								{Name: "ROKKU_BUCKET_NOTIFY_ENABLED",
+									Value: valueOrDefault("True", "False")},
+							},
 						},
 					},
 					Affinity:                      n.Spec.PodTemplate.Affinity,
